@@ -7,18 +7,17 @@ FROM maven:3.9.11-eclipse-temurin-21 AS builder
 
 WORKDIR /app
 
-# Copy only dependency files first
-# This allows Docker to cache Maven dependencies
+# Copy Maven configuration first
 COPY pom.xml .
 
-# Cache Maven repository between builds
+# Cache Maven dependencies
 RUN --mount=type=cache,target=/root/.m2 \
     mvn dependency:go-offline -B
 
 # Copy source code
 COPY src ./src
 
-# Build the application
+# Build WAR
 RUN --mount=type=cache,target=/root/.m2 \
     mvn clean package -DskipTests -B
 
@@ -26,13 +25,16 @@ RUN --mount=type=cache,target=/root/.m2 \
 # ==============================
 # Stage 2: Runtime
 # ==============================
-FROM eclipse-temurin:21-jre
+FROM tomcat:9.0-jdk21-temurin
 
-WORKDIR /app
+# Remove default Tomcat applications
+RUN rm -rf /usr/local/tomcat/webapps/*
 
-# Copy generated JAR from builder
-COPY --from=builder /app/target/*.jar app.jar
+# Copy WAR file
+COPY --from=builder \
+    /app/target/hello-world-war.war \
+    /usr/local/tomcat/webapps/ROOT.war
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+CMD ["catalina.sh", "run"]
